@@ -1,0 +1,32 @@
+name: Policy Checks
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+
+jobs:
+  validate-pr-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR target branch
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+
+          if [ "$BASE_REF" != "dev" ]; then
+            echo "Pull requests must target the dev branch. Current target: $BASE_REF"
+            exit 1
+          fi
+
+      - name: Validate source branch naming
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+
+          if ! echo "$HEAD_REF" | grep -Eq '^(feature|fix|hotfix|chore)/[a-z0-9][a-z0-9-]*$'; then
+            echo "Invalid branch name: $HEAD_REF"
+            echo "Allowed patterns: feature/<slug>, fix/<slug>, hotfix/<slug>, chore/<slug>"
+            exit 1
+          fi
