@@ -154,16 +154,9 @@ jobs:
           echo "Final Branch Name: $BRANCH_NAME"
 
           # 4. 이슈 제목에서 한글 제거하여 업데이트
-          # shell parameter expansion으로 태그 추출 (grep/sed 비ASCII 문제 회피)
-          case "$ISSUE_TITLE" in
-            \[*\]*)
-              TAG_PREFIX="${ISSUE_TITLE%%]*}]"
-              NEW_ISSUE_TITLE="${TAG_PREFIX} ${SLUG}"
-              ;;
-            *)
-              NEW_ISSUE_TITLE="${SLUG}"
-              ;;
-          esac
+          # BRANCH_TYPE(feature/fix/hotfix/chore)을 태그로 사용 (다른 워크플로우와 경합 방지)
+          TAG_LABEL=$(echo "$BRANCH_TYPE" | sed 's/.*/\u&/')
+          NEW_ISSUE_TITLE="[${TAG_LABEL}] ${SLUG}"
 
           echo "Updating issue title to: $NEW_ISSUE_TITLE"
           gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --title "$NEW_ISSUE_TITLE"
