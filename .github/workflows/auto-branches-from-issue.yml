@@ -154,8 +154,10 @@ jobs:
           echo "Final Branch Name: $BRANCH_NAME"
 
           # 4. 이슈 제목에서 한글 제거하여 업데이트
-          TAG_PREFIX=$(echo "$ISSUE_TITLE" | sed -n 's/^\(\[[^]]*\]\).*/\1/p')
-          if [ -n "$TAG_PREFIX" ]; then
+          # TITLE_TYPE은 이미 위에서 추출됨 (소문자). 원본 태그를 BRANCH_TYPE 기준으로 복원
+          if printf '%s' "$ISSUE_TITLE" | grep -q '^\['; then
+            # 원본 이슈 제목에서 태그 부분을 그대로 추출
+            TAG_PREFIX=$(printf '%s' "$ISSUE_TITLE" | grep -o '^\[[^]]*\]')
             NEW_ISSUE_TITLE="${TAG_PREFIX} ${SLUG}"
           else
             NEW_ISSUE_TITLE="${SLUG}"
