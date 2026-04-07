@@ -71,11 +71,10 @@ jobs:
           # 1. 태그 제거 및 슬러그 생성
           CLEAN_TITLE=$(echo "$ISSUE_TITLE" | sed 's/^\[[^]]*\][[:space:]]*//')
           CLEAN_TITLE=$(echo "$CLEAN_TITLE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-          # 한글 및 비ASCII 문자 제거
-          CLEAN_TITLE=$(echo "$CLEAN_TITLE" | sed 's/[^a-zA-Z0-9 [:punct:]]//g')
+          # 한글 및 비ASCII 문자 제거 (영문, 숫자, 공백, 하이픈만 유지)
+          CLEAN_TITLE=$(echo "$CLEAN_TITLE" | sed 's/[^a-zA-Z0-9 -]//g')
           SLUG=$(echo "$CLEAN_TITLE" \
             | tr '[:upper:]' '[:lower:]' \
-            | sed 's/[[:punct:]]//g' \
             | tr ' ' '-' \
           )
           SLUG=$(echo "$SLUG" \
@@ -154,14 +153,25 @@ jobs:
           
           echo "Final Branch Name: $BRANCH_NAME"
 
-          # 4. 브랜치 생성 및 이슈 연결 (GH CLI 사용)
-          
+          # 4. 이슈 제목에서 한글 제거하여 업데이트
+          TAG_PREFIX=$(echo "$ISSUE_TITLE" | sed -n 's/^\(\[[^]]*\]\).*/\1/p')
+          if [ -n "$TAG_PREFIX" ]; then
+            NEW_ISSUE_TITLE="${TAG_PREFIX} ${SLUG}"
+          else
+            NEW_ISSUE_TITLE="${SLUG}"
+          fi
+
+          echo "Updating issue title to: $NEW_ISSUE_TITLE"
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --title "$NEW_ISSUE_TITLE"
+
+          # 5. 브랜치 생성 및 이슈 연결 (GH CLI 사용)
+
           gh issue develop "$ISSUE_NUMBER" \
             --repo "$REPO" \
             --branch-repo "$REPO" \
             --base "$BASE_BRANCH" \
             --name "$BRANCH_NAME"
-          
+
           echo "Branch created and linked successfully."
           echo "Linked branches now:"
           gh issue develop --list --repo "$REPO" "$ISSUE_NUMBER"
