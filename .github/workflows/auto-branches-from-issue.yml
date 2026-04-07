@@ -71,6 +71,8 @@ jobs:
           # 1. 태그 제거 및 슬러그 생성
           CLEAN_TITLE=$(echo "$ISSUE_TITLE" | sed 's/^\[[^]]*\][[:space:]]*//')
           CLEAN_TITLE=$(echo "$CLEAN_TITLE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          # 한글 및 비ASCII 문자 제거
+          CLEAN_TITLE=$(echo "$CLEAN_TITLE" | sed 's/[^a-zA-Z0-9 [:punct:]]//g')
           SLUG=$(echo "$CLEAN_TITLE" \
             | tr '[:upper:]' '[:lower:]' \
             | sed 's/[[:punct:]]//g' \
