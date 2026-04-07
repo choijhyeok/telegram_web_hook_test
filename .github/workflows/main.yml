@@ -33,20 +33,38 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GH_TO_TELEGRAM_MAPPING: ${{ secrets.GH_TO_TELEGRAM_MAPPING }}
         run: |
+          # GitHub username → Telegram 멘션 변환 함수
+          mention() {
+            local github_user="$1"
+            local tg_id
+            tg_id=$(echo "$GH_TO_TELEGRAM_MAPPING" | jq -r --arg u "$github_user" '.[$u] // ""' 2>/dev/null)
+            if [ -n "$tg_id" ] && [ "$tg_id" != "" ]; then
+              echo "<a href=\"tg://user?id=${tg_id}\">${github_user}</a>"
+            else
+              echo "${github_user}"
+            fi
+          }
+
           # 작성자
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            AUTHOR="${{ github.event.issue.user.login }}"
+            AUTHOR_GH="${{ github.event.issue.user.login }}"
           else
-            AUTHOR="${{ github.event.pull_request.user.login }}"
+            AUTHOR_GH="${{ github.event.pull_request.user.login }}"
           fi
+          AUTHOR=$(mention "$AUTHOR_GH")
 
           MSG=""
 
           # 리뷰 요청 알림
           if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.action }}" = "review_requested" ]; then
-            REVIEWER="${{ github.event.pull_request.requested_reviewers[0].login }}"
-            REVIEWER="${REVIEWER:-없음}"
+            REVIEWER_GH="${{ github.event.pull_request.requested_reviewers[0].login }}"
+            if [ -n "$REVIEWER_GH" ]; then
+              REVIEWER=$(mention "$REVIEWER_GH")
+            else
+              REVIEWER="없음"
+            fi
             MSG="👀 <b>리뷰를 요청드립니다!</b>
           <b>작성자</b>: ${AUTHOR}
           <b>리뷰어</b>: ${REVIEWER}
@@ -55,7 +73,7 @@ jobs:
 
           # PR 댓글 알림
           elif [ "${{ github.event_name }}" = "issue_comment" ]; then
-            COMMENTER="${{ github.event.comment.user.login }}"
+            COMMENTER=$(mention "${{ github.event.comment.user.login }}")
             MSG="💬 <b>댓글이 작성되었습니다!</b>
           <b>댓글 작성자</b>: ${COMMENTER}
           <b>PR 제목</b>: <code>${{ github.event.issue.title }}</code>
@@ -64,7 +82,7 @@ jobs:
 
           # 리뷰 코멘트 알림
           elif [ "${{ github.event_name }}" = "pull_request_review_comment" ]; then
-            COMMENTER="${{ github.event.comment.user.login }}"
+            COMMENTER=$(mention "${{ github.event.comment.user.login }}")
             MSG="💬 <b>리뷰 코멘트가 작성되었습니다!</b>
           <b>작성자</b>: ${COMMENTER}
           <b>PR 제목</b>: <code>${{ github.event.pull_request.title }}</code>
@@ -73,7 +91,7 @@ jobs:
 
           # 리뷰 승인 알림
           elif [ "${{ github.event_name }}" = "pull_request_review" ] && [ "${{ github.event.review.state }}" = "approved" ]; then
-            REVIEWER="${{ github.event.review.user.login }}"
+            REVIEWER=$(mention "${{ github.event.review.user.login }}")
             MSG="✅ <b>리뷰가 승인되었습니다!</b>
           <b>리뷰어</b>: ${REVIEWER}
           <b>PR 제목</b>: <code>${{ github.event.pull_request.title }}</code>
@@ -82,7 +100,7 @@ jobs:
 
           # PR 머지 알림
           elif [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.action }}" = "closed" ] && [ "${{ github.event.pull_request.merged }}" = "true" ]; then
-            MERGER="${{ github.event.pull_request.merged_by.login }}"
+            MERGER=$(mention "${{ github.event.pull_request.merged_by.login }}")
             MSG="🎉 <b>PR이 머지되었습니다!</b>
           <b>머지한 사람</b>: ${MERGER}
           <b>작성자</b>: ${AUTHOR}
