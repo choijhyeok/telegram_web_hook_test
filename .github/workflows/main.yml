@@ -29,8 +29,10 @@ jobs:
           echo "Repository: ${{ github.repository }}"
           echo "========================="
 
-      - name: 사용자 매핑 및 메시지 생성
-        id: message
+      - name: 메시지 생성 및 Telegram 전송
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           # 작성자
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
@@ -39,70 +41,74 @@ jobs:
             AUTHOR="${{ github.event.pull_request.user.login }}"
           fi
 
+          MSG=""
+
           # 리뷰 요청 알림
           if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.action }}" = "review_requested" ]; then
             REVIEWER="${{ github.event.pull_request.requested_reviewers[0].login }}"
             REVIEWER="${REVIEWER:-없음}"
-            MSG="👀 *리뷰를 요청드립니다\!*
-          *작성자*: ${AUTHOR}
-          *리뷰어*: ${REVIEWER}
-          *PR 제목*: \`${{ github.event.pull_request.title }}\`
-          *링크*: ${{ github.event.pull_request.html_url }}"
+            MSG="👀 <b>리뷰를 요청드립니다!</b>
+          <b>작성자</b>: ${AUTHOR}
+          <b>리뷰어</b>: ${REVIEWER}
+          <b>PR 제목</b>: <code>${{ github.event.pull_request.title }}</code>
+          <b>링크</b>: ${{ github.event.pull_request.html_url }}"
 
           # PR 댓글 알림
           elif [ "${{ github.event_name }}" = "issue_comment" ]; then
             COMMENTER="${{ github.event.comment.user.login }}"
-            MSG="💬 *댓글이 작성되었습니다\!*
-          *댓글 작성자*: ${COMMENTER}
-          *PR 제목*: \`${{ github.event.issue.title }}\`
-          *PR 작성자*: ${AUTHOR}
-          *링크*: ${{ github.event.issue.html_url }}"
+            MSG="💬 <b>댓글이 작성되었습니다!</b>
+          <b>댓글 작성자</b>: ${COMMENTER}
+          <b>PR 제목</b>: <code>${{ github.event.issue.title }}</code>
+          <b>PR 작성자</b>: ${AUTHOR}
+          <b>링크</b>: ${{ github.event.issue.html_url }}"
 
           # 리뷰 코멘트 알림
           elif [ "${{ github.event_name }}" = "pull_request_review_comment" ]; then
             COMMENTER="${{ github.event.comment.user.login }}"
-            MSG="💬 *리뷰 코멘트가 작성되었습니다\!*
-          *작성자*: ${COMMENTER}
-          *PR 제목*: \`${{ github.event.pull_request.title }}\`
-          *PR 작성자*: ${AUTHOR}
-          *링크*: ${{ github.event.comment.html_url }}"
+            MSG="💬 <b>리뷰 코멘트가 작성되었습니다!</b>
+          <b>작성자</b>: ${COMMENTER}
+          <b>PR 제목</b>: <code>${{ github.event.pull_request.title }}</code>
+          <b>PR 작성자</b>: ${AUTHOR}
+          <b>링크</b>: ${{ github.event.comment.html_url }}"
 
           # 리뷰 승인 알림
           elif [ "${{ github.event_name }}" = "pull_request_review" ] && [ "${{ github.event.review.state }}" = "approved" ]; then
             REVIEWER="${{ github.event.review.user.login }}"
-            MSG="✅ *리뷰가 승인되었습니다\!*
-          *리뷰어*: ${REVIEWER}
-          *PR 제목*: \`${{ github.event.pull_request.title }}\`
-          *작성자*: ${AUTHOR}
-          *링크*: ${{ github.event.pull_request.html_url }}"
+            MSG="✅ <b>리뷰가 승인되었습니다!</b>
+          <b>리뷰어</b>: ${REVIEWER}
+          <b>PR 제목</b>: <code>${{ github.event.pull_request.title }}</code>
+          <b>작성자</b>: ${AUTHOR}
+          <b>링크</b>: ${{ github.event.pull_request.html_url }}"
 
           # PR 머지 알림
           elif [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.action }}" = "closed" ] && [ "${{ github.event.pull_request.merged }}" = "true" ]; then
             MERGER="${{ github.event.pull_request.merged_by.login }}"
-            MSG="🎉 *PR이 머지되었습니다\!*
-          *머지한 사람*: ${MERGER}
-          *작성자*: ${AUTHOR}
-          *제목*: \`${{ github.event.pull_request.title }}\`
-          *링크*: ${{ github.event.pull_request.html_url }}"
+            MSG="🎉 <b>PR이 머지되었습니다!</b>
+          <b>머지한 사람</b>: ${MERGER}
+          <b>작성자</b>: ${AUTHOR}
+          <b>제목</b>: <code>${{ github.event.pull_request.title }}</code>
+          <b>링크</b>: ${{ github.event.pull_request.html_url }}"
 
           else
-            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "No matching event. Skipping."
             exit 0
           fi
 
-          echo "skip=false" >> $GITHUB_OUTPUT
+          # Telegram 전송
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg chat_id "$TELEGRAM_CHAT_ID" \
+              --arg text "$MSG" \
+              '{chat_id: $chat_id, text: $text, parse_mode: "HTML"}')")
 
-          # 멀티라인 메시지를 GITHUB_OUTPUT에 저장
-          {
-            echo "text<<EOFMSG"
-            echo "$MSG"
-            echo "EOFMSG"
-          } >> $GITHUB_OUTPUT
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
 
-      - name: Telegram 알림 전송
-        if: steps.message.outputs.skip != 'true'
-        run: |
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d parse_mode="MarkdownV2" \
-            --data-urlencode "text=${{ steps.message.outputs.text }}"
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Telegram API 호출 실패 (HTTP $HTTP_CODE)"
+            exit 1
+          fi
